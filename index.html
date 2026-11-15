@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RYONK — AI Workspace</title>
+<meta name="description" content="RYONK. Intelligence meets creativity.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<!-- Sprite ikon -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+    <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+    <symbol id="i-clip" viewBox="0 0 24 24"><path d="M21 11l-9 9a5 5 0 0 1-7-7l9-9a3 3 0 0 1 4 4l-9 9a1 1 0 0 1-2-2l8-8"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="M21 16l-5-5-9 9"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v4h4"/></symbol>
+  </defs>
+</svg>
+
+<div class="app" id="app">
+  <div class="scrim" id="scrim" hidden></div>
+
+  <!-- A. Sidebar -->
+  <aside class="sidebar" id="sidebar" aria-label="Navigasi">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="url(#g)"/><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f7dff"/><stop offset="1" stop-color="#1a2f7a"/></linearGradient></defs><path d="M10 23V9h7a4 4 0 0 1 0 8h-7M17 17l6 6" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="wordmark">RYONK</span>
+    </div>
+    <button class="btn primary block" id="newChat"><svg class="i"><use href="#i-plus"/></svg>New chat</button>
+
+    <div class="field"><label for="mode">Mode</label><select id="mode"></select></div>
+    <div class="field"><label for="model">Model</label><select id="model"></select></div>
+
+    <div class="hist-title">Riwayat</div>
+    <nav class="history" id="history" aria-label="Riwayat percakapan"></nav>
+
+    <div class="tools">
+      <button class="nav" data-open="sys"><svg class="i"><use href="#i-gear"/></svg>System prompt</button>
+      <button class="nav" data-open="prompt"><svg class="i"><use href="#i-spark"/></svg>Prompt generator</button>
+      <button class="nav" data-open="img"><svg class="i"><use href="#i-image"/></svg>Image generator</button>
+      <button class="nav" data-open="media"><svg class="i"><use href="#i-down"/></svg>Media downloader</button>
+      <button class="nav" data-open="export"><svg class="i"><use href="#i-file"/></svg>Export conversations</button>
+      <button class="nav danger" id="clearData"><svg class="i"><use href="#i-trash"/></svg>Clear local data</button>
+    </div>
+    <button class="profile" data-open="settings"><span class="avatar" id="avatar">G</span><span id="profName">Guest</span></button>
+  </aside>
+
+  <!-- B. Workspace -->
+  <main class="main">
+    <header class="topbar">
+      <button class="icon-btn" id="toggleSide" aria-label="Buka/tutup sidebar"><svg class="i"><use href="#i-menu"/></svg></button>
+      <div class="ws"><strong>RYONK Workspace</strong><span class="muted" id="modelLabel"></span></div>
+      <span class="status" id="status" role="status" aria-live="polite"><i></i><b>Ready</b></span>
+      <button class="icon-btn" id="themeBtn" aria-label="Ganti tema"><svg class="i"><use href="#i-sun"/></svg></button>
+      <button class="icon-btn" data-open="settings" aria-label="Pengaturan"><svg class="i"><use href="#i-gear"/></svg></button>
+      <button class="icon-btn" id="toggleInsp" aria-label="Buka/tutup Inspector"><svg class="i"><use href="#i-panel"/></svg></button>
+    </header>
+
+    <div class="chat" id="chat" aria-live="polite">
+      <section class="welcome" id="welcome">
+        <h1>Welcome to RYONK.</h1>
+        <p class="lead">Your ideas deserve intelligence.</p>
+        <p class="muted" id="demoNote"></p>
+        <div class="chips" id="chips"></div>
+      </section>
+      <div class="msgs" id="msgs"></div>
+    </div>
+
+    <footer class="composer">
+      <div class="attach-row" id="attachRow" hidden></div>
+      <div class="box">
+        <button class="icon-btn" id="attachBtn" aria-label="Lampirkan file"><svg class="i"><use href="#i-clip"/></svg></button>
+        <input type="file" id="file" hidden>
+        <textarea id="prompt" rows="1" placeholder="Tulis pesan… (Enter kirim, Shift+Enter baris baru)" aria-label="Prompt"></textarea>
+        <button class="icon-btn stop" id="stopBtn" aria-label="Hentikan" hidden><svg class="i"><use href="#i-stop"/></svg></button>
+        <button class="send" id="sendBtn" aria-label="Kirim"><svg class="i"><use href="#i-send"/></svg></button>
+      </div>
+    </footer>
+  </main>
+
+  <!-- C. Inspector -->
+  <aside class="inspector" id="inspector" aria-label="Inspector">
+    <div class="insp-head"><strong>Inspector</strong><button class="icon-btn" id="closeInsp" aria-label="Tutup"><svg class="i"><use href="#i-x"/></svg></button></div>
+    <h3>Ringkasan</h3><div id="inSummary" class="muted"></div>
+    <h3>Berkas</h3><div id="inFiles" class="muted"></div>
+    <h3>Preview</h3><div id="inPreview" class="muted">Belum ada gambar atau HTML.</div>
+  </aside>
+</div>
+
+<!-- D. Modal -->
+<div class="modal" id="m-sys" role="dialog" aria-modal="true" aria-labelledby="t-sys" hidden><div class="card">
+  <h2 id="t-sys">System prompt</h2><p class="muted">Instruksi awal untuk semua percakapan baru.</p>
+  <textarea id="sysText" rows="7"></textarea>
+  <div class="actions"><button class="btn" id="sysReset">Reset</button><button class="btn" data-close>Batal</button><button class="btn primary" id="sysSave">Simpan</button></div>
+</div></div>
+
+<div class="modal" id="m-prompt" role="dialog" aria-modal="true" aria-labelledby="t-prompt" hidden><div class="card">
+  <h2 id="t-prompt">Prompt generator</h2><p class="muted">Menyusun prompt dari template lokal. Ini bukan AI, tidak ada data yang dikirim.</p>
+  <label for="pgTopic">Topik</label><input id="pgTopic" placeholder="contoh: strategi konten Instagram">
+  <div class="two"><div><label for="pgGoal">Tujuan</label><select id="pgGoal"><option>Menulis</option><option>Coding</option><option>Analisis</option><option>Gambar</option></select></div>
+  <div><label for="pgTone">Gaya</label><select id="pgTone"><option>Profesional</option><option>Santai</option><option>Teknis</option><option>Kreatif</option></select></div></div>
+  <textarea id="pgOut" rows="6" readonly placeholder="Hasil prompt muncul di sini"></textarea>
+  <div class="actions"><button class="btn" data-close>Tutup</button><button class="btn" id="pgCopy">Salin</button><button class="btn" id="pgUse">Pakai di chat</button><button class="btn primary" id="pgGen">Susun</button></div>
+</div></div>
+
+<div class="modal" id="m-img" role="dialog" aria-modal="true" aria-labelledby="t-img" hidden><div class="card">
+  <h2 id="t-img">Image generator</h2><p class="muted" id="imgNote"></p>
+  <label for="imgPrompt">Prompt</label><textarea id="imgPrompt" rows="3"></textarea>
+  <label for="imgSize">Ukuran</label><select id="imgSize"><option>1024x1024</option><option>1024x768</option><option>768x1024</option></select>
+  <div id="imgOut" class="out"></div>
+  <div class="actions"><button class="btn" data-close>Tutup</button><button class="btn primary" id="imgGo">Generate</button></div>
+</div></div>
+
+<div class="modal" id="m-media" role="dialog" aria-modal="true" aria-labelledby="t-media" hidden><div class="card">
+  <h2 id="t-media">Media downloader</h2><p class="muted" id="mediaNote"></p>
+  <label for="mediaUrl">URL media</label><input id="mediaUrl" type="url" placeholder="https://…">
+  <div id="mediaOut" class="out"></div>
+  <div class="actions"><button class="btn" data-close>Tutup</button><button class="btn primary" id="mediaGo">Ambil</button></div>
+</div></div>
+
+<div class="modal" id="m-export" role="dialog" aria-modal="true" aria-labelledby="t-exp" hidden><div class="card">
+  <h2 id="t-exp">Export conversations</h2><p class="muted">Unduh sebagai file JSON dari penyimpanan lokal browser ini.</p>
+  <div class="actions"><button class="btn" data-close>Batal</button><button class="btn" id="expOne">Percakapan ini</button><button class="btn primary" id="expAll">Semua</button></div>
+</div></div>
+
+<div class="modal" id="m-settings" role="dialog" aria-modal="true" aria-labelledby="t-set" hidden><div class="card">
+  <h2 id="t-set">Pengaturan</h2>
+  <label for="setName">Nama tampilan</label><input id="setName" maxlength="30">
+  <label for="setTheme">Tema</label><select id="setTheme"><option value="dark">Dark</option><option value="light">Light</option></select>
+  <div class="actions"><button class="btn" data-close>Batal</button><button class="btn primary" id="setSave">Simpan</button></div>
+</div></div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="config.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
