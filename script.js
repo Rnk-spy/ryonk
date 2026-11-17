@@ -346,7 +346,7 @@
 
   async function checkTurnstile() {
     const button = $('#turnstileCheckBtn'), result = $('#turnstileCheckResult');
-    if (!C.isLocalDevelopment || !C.api.turnstileCheckEndpoint) return;
+    if (!button || !result || !C.isLocalDevelopment || !C.api.turnstileCheckEndpoint) return;
     if (!C.turnstileSiteKey) {
       result.textContent = 'Site Key development belum dikonfigurasi.';
       return;
@@ -399,9 +399,13 @@
     $('#mode').value = S.mode; $('#model').value = S.model;
     $('#demoNote').textContent = C.api.chatEndpoint ? '' :
       'Mode DEMO: ' + (C.api.chatUnavailableReason || 'belum ada API yang terhubung') + '.';
-    $('#turnstileCheckBtn').hidden = !C.isLocalDevelopment;
-    $('#turnstileCheckResult').hidden = !C.isLocalDevelopment;
-    $('#turnstileCheckBtn').onclick = checkTurnstile;
+    const turnstileCheckBtn = $('#turnstileCheckBtn');
+    const turnstileCheckResult = $('#turnstileCheckResult');
+    if (turnstileCheckBtn) {
+      turnstileCheckBtn.hidden = !C.isLocalDevelopment;
+      turnstileCheckBtn.onclick = checkTurnstile;
+    }
+    if (turnstileCheckResult) turnstileCheckResult.hidden = !C.isLocalDevelopment;
     ['Rangkum dokumen yang saya lampirkan', 'Bantu susun rencana proyek', 'Jelaskan konsep ini dengan sederhana', 'Tulis ulang paragraf ini agar lebih tajam']
       .forEach(t => { const b = el('button', 'chip', t); b.onclick = () => { $('#prompt').value = t; autosize(); $('#prompt').focus(); }; $('#chips').appendChild(b); });
 
