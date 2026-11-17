@@ -5,6 +5,7 @@
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
   const KEY = 'ryonk.v1';
+  const CHAT_LIMITS = { bodyBytes: 64 * 1024, messages: 20, messageChars: 8000, totalChars: 24000, systemChars: 2000 };
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const mobile = () => window.matchMedia('(max-width:900px)').matches;
 
@@ -41,6 +42,80 @@
     const t = setTimeout(res, ms);
     sig.addEventListener('abort', () => { clearTimeout(t); rej(Object.assign(new Error('abort'), { name: 'AbortError' })); });
   });
+  const turnstileError = message => Object.assign(new Error(message), { name: 'TurnstileError' });
+  const turnstileWidgetIds = Object.create(null), turnstilePendings = Object.create(null);
+  function waitForTurnstile(sig) {
+    if (window.turnstile) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const finish = error => {
+        clearTimeout(timer);
+        window.removeEventListener('ryonk-turnstile-ready', onReady);
+        sig.removeEventListener('abort', onAbort);
+        if (error) reject(error); else resolve();
+      };
+      const onReady = () => window.turnstile && finish();
+      const onAbort = () => finish(Object.assign(new Error('abort'), { name: 'AbortError' }));
+      const timer = setTimeout(() => finish(turnstileError('Turnstile tidak dapat dimuat.')), 10000);
+      window.addEventListener('ryonk-turnstile-ready', onReady, { once: true });
+      sig.addEventListener('abort', onAbort, { once: true });
+      if (sig.aborted) onAbort();
+      else if (window.turnstile) onReady();
+    });
+  }
+  async function getTurnstileToken(sig, action) {
+    await waitForTurnstile(sig);
+    if (turnstileWidgetIds[action] === undefined) {
+      const container = action === 'chat' ? '#turnstile-chat-widget' : '#turnstile-check-widget';
+      turnstileWidgetIds[action] = window.turnstile.render(container, {
+        sitekey: C.turnstileSiteKey,
+        size: 'invisible',
+        action,
+        execution: 'execute',
+        callback: token => turnstilePendings[action] && turnstilePendings[action].resolve(token),
+        'error-callback': () => turnstilePendings[action] && turnstilePendings[action].reject(turnstileError('Turnstile gagal memverifikasi browser.')),
+        'expired-callback': () => turnstilePendings[action] && turnstilePendings[action].reject(turnstileError('Token Turnstile kedaluwarsa.')),
+        'timeout-callback': () => turnstilePendings[action] && turnstilePendings[action].reject(turnstileError('Verifikasi Turnstile melewati batas waktu.'))
+      });
+    }
+    if (turnstilePendings[action]) throw turnstileError('Verifikasi Turnstile untuk permintaan ini sedang berjalan.');
+
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (error, token) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        sig.removeEventListener('abort', onAbort);
+        if (turnstilePendings[action] === pending) delete turnstilePendings[action];
+        if (error) reject(error); else resolve(token);
+      };
+      const onAbort = () => finish(Object.assign(new Error('abort'), { name: 'AbortError' }));
+      const timer = setTimeout(() => finish(turnstileError('Verifikasi Turnstile melewati batas waktu.')), 30000);
+      const pending = {
+        resolve: token => {
+          if (typeof token !== 'string' || token.trim().length === 0) {
+            finish(turnstileError('Turnstile tidak menghasilkan token yang valid.'));
+            return;
+          }
+          finish(null, token);
+        },
+        reject: error => finish(error)
+      };
+      turnstilePendings[action] = pending;
+      sig.addEventListener('abort', onAbort, { once: true });
+      if (sig.aborted) return onAbort();
+      try {
+        window.turnstile.execute(turnstileWidgetIds[action]);
+      } catch (error) {
+        finish(turnstileError(error.message || 'Turnstile gagal dijalankan.'));
+      }
+    });
+  }
+  function resetTurnstile(action) {
+    if (turnstileWidgetIds[action] !== undefined && window.turnstile) {
+      window.turnstile.reset(turnstileWidgetIds[action]);
+    }
+  }
 
   /* ---------- Render ---------- */
   function renderHistory() {
@@ -100,32 +175,121 @@
     $('#status').classList.toggle('busy', b); $('#status b').textContent = b ? 'Thinking' : 'Ready';
     $('#stopBtn').hidden = !b; $('#sendBtn').hidden = b;
   }
+  function chatRequestBody(c, turnstileToken) {
+    const system = c.system || S.system;
+    const source = c.messages.filter(m => !m.note).map(m => ({
+      role: m.role,
+      content: m.content || (m.role === 'user' && m.files && m.files.length
+        ? 'Lampiran tersedia di browser, tetapi isi file tidak dikirim ke AI.'
+        : '')
+    }));
+    const messages = [];
+    let totalChars = 0;
+    for (let i = source.length - 1; i >= 0; i--) {
+      const m = source[i];
+      if (!m.content || m.content.length > CHAT_LIMITS.messageChars ||
+          messages.length >= CHAT_LIMITS.messages || totalChars + m.content.length > CHAT_LIMITS.totalChars) break;
+      messages.unshift(m);
+      totalChars += m.content.length;
+    }
+
+    if (!messages.length || messages[messages.length - 1].role !== 'user') {
+      throw new Error('Pesan tidak memenuhi format chat Worker.');
+    }
+
+    const payload = { model: S.model, mode: S.mode, system, messages, turnstileToken };
+    let body = JSON.stringify(payload);
+    while (new TextEncoder().encode(body).length > CHAT_LIMITS.bodyBytes && messages.length > 1) {
+      messages.shift();
+      body = JSON.stringify(payload);
+    }
+    if (new TextEncoder().encode(body).length > CHAT_LIMITS.bodyBytes) {
+      throw new Error('Permintaan chat melebihi batas ukuran Worker.');
+    }
+    return body;
+  }
+  function demoFallback(reason) {
+    return {
+      reply: 'Mode DEMO (fallback): ' + reason + '. Ini bukan jawaban AI. Pesan Anda tetap tersimpan di browser ini.',
+      demo: true
+    };
+  }
   async function ask(c, sig) {
     const api = C.api;
     if (!api.chatEndpoint) {
       await wait(900, sig);
-      return 'Mode demo: belum ada API yang terhubung, jadi ini bukan jawaban AI. Pesan Anda tersimpan di browser ini. Isi api.chatEndpoint di config.js untuk jawaban sungguhan.';
+      return demoFallback(api.chatUnavailableReason || 'belum ada API yang terhubung');
     }
-    const tm = setTimeout(() => abortCtl && abortCtl.abort(), api.timeoutMs);
+    if (!C.turnstileSiteKey) {
+      return demoFallback('sitekey Turnstile belum dikonfigurasi');
+    }
+    let timedOut = false;
+    const tm = setTimeout(() => { timedOut = true; abortCtl && abortCtl.abort(); }, api.timeoutMs);
     try {
+      let turnstileToken;
+      try {
+        turnstileToken = await getTurnstileToken(sig, 'chat');
+      } catch (error) {
+        if (error.name === 'AbortError' || error.name === 'TurnstileError') throw error;
+        throw turnstileError('Turnstile gagal dimuat atau dijalankan.');
+      }
       const r = await fetch(api.chatEndpoint, { method: 'POST', signal: sig, headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: S.model, mode: S.mode, system: c.system || S.system,
-          messages: c.messages.filter(m => !m.note).map(m => ({ role: m.role, content: m.content })) }) });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
+        body: chatRequestBody(c, turnstileToken) });
+      if (r.status === 429) {
+        let payload = {};
+        try { payload = await r.json(); } catch {}
+        const serverMessage = typeof payload?.error?.message === 'string'
+          ? payload.error.message
+          : 'Batas permintaan chat tercapai.';
+        const retryAfter = Number(r.headers.get('Retry-After'));
+        const waitMessage = Number.isSafeInteger(retryAfter) && retryAfter > 0
+          ? ` Coba lagi dalam ${retryAfter} detik.`
+          : ' Tunggu sebentar lalu coba lagi.';
+        return demoFallback(serverMessage + waitMessage);
+      }
+      if (r.status === 502) {
+        let payload = {};
+        try { payload = await r.json(); } catch {}
+        const correlationId = payload?.error?.correlationId;
+        const correlationNote = typeof correlationId === 'string' &&
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(correlationId)
+          ? ` (ID korelasi: ${correlationId})`
+          : '';
+        return demoFallback('Worker gagal memproses permintaan AI' + correlationNote);
+      }
+      if (!r.ok) return demoFallback('Worker merespons HTTP ' + r.status);
       const j = await r.json();
-      if (typeof j.reply !== 'string') throw new Error('Respons tidak berisi "reply"');
-      return j.reply;
-    } finally { clearTimeout(tm); }
+      if (typeof j.reply !== 'string') return demoFallback('Worker mengirim respons yang tidak valid');
+      return { reply: j.reply, demo: false };
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        if (timedOut) return demoFallback('waktu tunggu koneksi Worker habis');
+        throw e;
+      }
+      if (e.name === 'TurnstileError') return demoFallback(e.message);
+      return demoFallback('Worker tidak tersedia atau koneksi gagal');
+    } finally {
+      clearTimeout(tm);
+      resetTurnstile('chat');
+    }
   }
   async function send() {
     const ta = $('#prompt'), text = ta.value.trim();
     if ((!text && !attach) || busy) return;
+    if (text.length > CHAT_LIMITS.messageChars) return toast('Pesan maksimal 8.000 karakter.');
+    const current = cur();
+    if (((current && current.system) || S.system).length > CHAT_LIMITS.systemChars) {
+      return toast('System prompt maksimal 2.000 karakter.');
+    }
     const c = cur() || newConv();
     c.messages.push({ role: 'user', content: text, files: attach ? [{ name: attach.name, size: attach.size, type: attach.type }] : [] });
     if (c.title === 'New conversation') c.title = (text || attach.name).slice(0, 40);
     ta.value = ''; autosize(); clearAttach(); save(); setBusy(true); renderAll();
     abortCtl = new AbortController();
-    try { c.messages.push({ role: 'assistant', content: await ask(c, abortCtl.signal), note: !C.api.chatEndpoint }); }
+    try {
+      const answer = await ask(c, abortCtl.signal);
+      c.messages.push({ role: 'assistant', content: answer.reply, note: answer.demo });
+    }
     catch (e) {
       c.messages.push({ role: 'assistant', note: true,
         content: e.name === 'AbortError' ? 'Generation dihentikan.' : 'Gagal menghubungi API: ' + e.message });
@@ -180,13 +344,64 @@
     if (!r.ok) throw new Error('HTTP ' + r.status); return r.json();
   }
 
+  async function checkTurnstile() {
+    const button = $('#turnstileCheckBtn'), result = $('#turnstileCheckResult');
+    if (!C.isLocalDevelopment || !C.api.turnstileCheckEndpoint) return;
+    if (!C.turnstileSiteKey) {
+      result.textContent = 'Site Key development belum dikonfigurasi.';
+      return;
+    }
+
+    button.disabled = true;
+    result.textContent = 'Menjalankan verifikasi Turnstile…';
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 40000);
+    try {
+      const token = await getTurnstileToken(controller.signal, 'turnstile-check');
+      const response = await fetch(C.api.turnstileCheckEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ turnstileToken: token }),
+        signal: controller.signal
+      });
+      let payload;
+      try {
+        payload = await response.json();
+      } catch {
+        throw new Error('Worker mengirim respons yang tidak valid.');
+      }
+      if (!response.ok || payload.verified !== true) {
+        const error = payload.error || {};
+        const details = [error.code || 'turnstile_check_failed'];
+        if (Number.isInteger(error.httpStatus)) details.push('HTTP ' + error.httpStatus);
+        if (Array.isArray(error.siteverifyErrorCodes) && error.siteverifyErrorCodes.length) {
+          details.push(error.siteverifyErrorCodes.join(', '));
+        }
+        throw new Error(details.join(' · ') + ': ' + (error.message || 'Verifikasi Turnstile gagal.'));
+      }
+      result.textContent = 'Berhasil: hostname ' + payload.hostname + ', action ' + payload.action + '.';
+    } catch (error) {
+      result.textContent = error.name === 'AbortError'
+        ? 'Uji Turnstile melewati batas waktu.'
+        : 'Gagal: ' + error.message;
+    } finally {
+      clearTimeout(timeout);
+      resetTurnstile('turnstile-check');
+      button.disabled = false;
+    }
+  }
+
   /* ---------- Init & event ---------- */
   function init() {
     applyTheme();
     $('#mode').innerHTML = C.modes.map(m => '<option value="' + m.id + '">' + m.label + '</option>').join('');
     $('#model').innerHTML = C.models.map(m => '<option value="' + m.id + '">' + m.label + '</option>').join('');
     $('#mode').value = S.mode; $('#model').value = S.model;
-    $('#demoNote').textContent = C.api.chatEndpoint ? '' : 'Mode demo: belum ada API terhubung (lihat config.js).';
+    $('#demoNote').textContent = C.api.chatEndpoint ? '' :
+      'Mode DEMO: ' + (C.api.chatUnavailableReason || 'belum ada API yang terhubung') + '.';
+    $('#turnstileCheckBtn').hidden = !C.isLocalDevelopment;
+    $('#turnstileCheckResult').hidden = !C.isLocalDevelopment;
+    $('#turnstileCheckBtn').onclick = checkTurnstile;
     ['Rangkum dokumen yang saya lampirkan', 'Bantu susun rencana proyek', 'Jelaskan konsep ini dengan sederhana', 'Tulis ulang paragraf ini agar lebih tajam']
       .forEach(t => { const b = el('button', 'chip', t); b.onclick = () => { $('#prompt').value = t; autosize(); $('#prompt').focus(); }; $('#chips').appendChild(b); });
 
