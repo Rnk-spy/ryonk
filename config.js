@@ -10,11 +10,27 @@
  *   mediaEndpoint : { url }                                            -> { downloadUrl: "https://..." }
  * Kosongkan endpoint = mode demo (UI jalan, tidak ada AI sungguhan).
  */
+const isLocalDevelopment = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+const chatEndpoints = {
+  development: "http://127.0.0.1:8787/api/chat",
+  production: "https://ryonk-chat-api-production.ryonk.workers.dev/api/chat"
+};
+
+window.ryonkTurnstileLoaded = false;
+window.ryonkTurnstileReady = () => {
+  window.ryonkTurnstileLoaded = true;
+  window.dispatchEvent(new Event("ryonk-turnstile-ready"));
+};
+
 window.RYONK_CONFIG = {
   appName: "RYONK",
   tagline: "Intelligence meets creativity.",
+  isLocalDevelopment,
+  turnstileSiteKey: isLocalDevelopment ? "0x4AAAAAAGDSl1YOJTaqnAQH" : "0x4AAAAAAGDRBjZgos_fIYPD",
   api: {
-    chatEndpoint: "",
+    chatEndpoint: isLocalDevelopment ? chatEndpoints.development : chatEndpoints.production,
+    turnstileCheckEndpoint: isLocalDevelopment ? "http://127.0.0.1:8787/api/turnstile-check" : "",
+    chatUnavailableReason: isLocalDevelopment ? "" : "URL Worker production belum dikonfigurasi",
     imageEndpoint: "",
     mediaEndpoint: "",
     timeoutMs: 60000
