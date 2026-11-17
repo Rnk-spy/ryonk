@@ -54,6 +54,8 @@
       <button class="nav" data-open="img"><svg class="i"><use href="#i-image"/></svg>Image generator</button>
       <button class="nav" data-open="media"><svg class="i"><use href="#i-down"/></svg>Media downloader</button>
       <button class="nav" data-open="export"><svg class="i"><use href="#i-file"/></svg>Export conversations</button>
+      <button class="nav" id="turnstileCheckBtn" type="button" hidden>Uji Turnstile (development)</button>
+      <div class="muted" id="turnstileCheckResult" role="status" aria-live="polite" hidden></div>
       <button class="nav danger" id="clearData"><svg class="i"><use href="#i-trash"/></svg>Clear local data</button>
     </div>
     <button class="profile" data-open="settings"><span class="avatar" id="avatar">G</span><span id="profName">Guest</span></button>
@@ -145,8 +147,11 @@
 </div></div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div id="turnstile-chat-widget" aria-hidden="true"></div>
+<div id="turnstile-check-widget" aria-hidden="true"></div>
 
 <script src="config.js"></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=ryonkTurnstileReady&render=explicit" async defer></script>
 <script src="script.js"></script>
 </body>
 </html>
